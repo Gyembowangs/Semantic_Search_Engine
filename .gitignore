@@ -1,0 +1,18 @@
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE / OS files
+.vscode/
+.idea/
+.DS_Store
+.qodo/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
