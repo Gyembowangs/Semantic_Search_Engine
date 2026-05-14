@@ -1,10 +1,14 @@
 import ast
+import base64
 import json
 import math
 import pickle
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
@@ -160,29 +164,72 @@ def search_products(query: str, top_k: int = 20) -> pd.DataFrame:
 
 
 def _extract_image_url(image_value: Any) -> str:
+    url = ""
     if image_value is None:
-        return ""
-    if isinstance(image_value, list):
-        return str(image_value[0]) if image_value else ""
-    text = str(image_value).strip()
-    if not text:
-        return ""
+        url = ""
+    elif isinstance(image_value, list):
+        url = str(image_value[0]) if image_value else ""
+    else:
+        text = str(image_value).strip()
+        if text:
+            parsed_ok = False
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list) and parsed:
+                    url = str(parsed[0])
+                    parsed_ok = True
+            except Exception:
+                pass
+            if not parsed_ok:
+                try:
+                    parsed = ast.literal_eval(text)
+                    if isinstance(parsed, list) and parsed:
+                        url = str(parsed[0])
+                        parsed_ok = True
+                except Exception:
+                    pass
+            if not parsed_ok:
+                cleaned = text.replace('[', '').replace(']', '').replace('"', '').replace("'", "")
+                url = cleaned.split(',')[0].strip()
+
+    if url:
+        url = url.replace("http://", "https://")
+        # Legacy Flipkart CDN hosts often return 403 in cloud deployments.
+        url = re.sub(r"^https://img\d+[a-z]?\.flixcart\.com", "https://rukminim2.flixcart.com", url)
+
+    if not url:
+        return "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgMzAwIDMwMCI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNmOGZhZmMiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM2NDc0OGIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=="
+    return url
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=500)
+def _to_embedded_image_src(url: str) -> str:
+    if not url:
+        return _extract_image_url("")
+    if url.startswith("data:image/"):
+        return url
+
+    headers = {
+        # Browser-like headers help with hosts that block unknown clients.
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Referer": "https://www.google.com/",
+    }
     try:
-        parsed = json.loads(text)
-        if isinstance(parsed, list) and parsed:
-            return str(parsed[0])
-    except Exception:
-        pass
-    try:
-        parsed = ast.literal_eval(text)
-        if isinstance(parsed, list) and parsed:
-            return str(parsed[0])
-    except Exception:
-        pass
-    
-    # Fallback to manual string cleaning
-    cleaned = text.replace('[', '').replace(']', '').replace('"', '').replace("'", "")
-    return cleaned.split(',')[0].strip()
+        req = Request(url, headers=headers)
+        with urlopen(req, timeout=8) as resp:
+            content_type = resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+            body = resp.read()
+            if not body:
+                return _extract_image_url("")
+            encoded = base64.b64encode(body).decode("ascii")
+            return f"data:{content_type};base64,{encoded}"
+    except (URLError, ValueError, TimeoutError, OSError):
+        return _extract_image_url("")
 
 
 def display_results(results: pd.DataFrame) -> None:
@@ -194,6 +241,7 @@ def display_results(results: pd.DataFrame) -> None:
     for i, row in results.iterrows():
         with cols[i % 4]:
             image_url = _extract_image_url(row.get("image", ""))
+            image_src = _to_embedded_image_src(image_url)
             score_val = float(row.get("score", 0.0))
             retail = float(row.get("retail_price", 0.0))
             discounted = float(row.get("discounted_price", 0.0))
@@ -218,7 +266,7 @@ def display_results(results: pd.DataFrame) -> None:
             card_html = f"""<div class="premium-card fade-in" style="animation-delay: {min(i * 0.05, 0.5)}s">
 <div class="card-image-container">
 {badge_html}
-<img class="card-image" src="{image_url}" alt="{product_name}" onerror="this.src='https://via.placeholder.com/300x300?text=No+Image'" />
+<img class="card-image" src="{image_src}" alt="{product_name}" referrerpolicy="no-referrer" loading="lazy" />
 </div>
 <div class="card-content">
 <div class="product-brand">PREMIUM</div>
