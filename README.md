@@ -21,7 +21,7 @@ Overall, the project demonstrates how modern NLP techniques can significantly en
 - **👤 Author:** Gyembo Wangchuk, Sonam Dorji and Galey Mo
 - **📦 Version:** 1.0.0
 - **📄 License:** Unlicense
-- **🌐 Website:** [https://search-engine-favwem6jgnwtsjjaumjsta.streamlit.app/](https://search-engine-favwem6jgnwtsjjaumjsta.streamlit.app/)
+- **🌐 Website:** [https://search-engine-favwem6jgnwtsjjaumjsta.streamlit.app/](https://semanticsearchengine-ssgrroxuty7b7o8u8ad3sv.streamlit.app/)
 - **📂 Repository:** [https://github.com/Gyembowangs/Semantic_Search_Engine.git](https://github.com/Gyembowangs/Semantic_Search_Engine.git)
 
 ## Features
